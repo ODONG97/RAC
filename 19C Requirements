@@ -55,6 +55,482 @@ Redundancy Level / Minimum number of disks / Data Files / Recovery Files / Both 
 - Oracle Database Home & Base  : 최소 7.5GB + 12GB = 20GB (40GB 이상 권고)
 - /tmp : 최소 4GB이상 권고 = 설치할 때 tmp 사용함, 설치하다가 tmp로 임시 저장, 부족하면 설치 안 됨, RAC는 필수 5GB~10GB
 
+##### Oracle Software 설치 경로 예시 #####
+chown -R oracle:dba /u01/oracle
+chmod -R 775 /u01/oracle
+chown -R oracle:dba /arch ( Archive Log 경로를 ASM 영역에 쓰지 않을 경우, ASM 영역이 권고)
+chmod -R 775 /arch ( Archive Log 경로를 ASM 영역에 쓰지 않을 경우, ASM 영역이 권고)
+chown -R oracle:dba /ora_log (Diag 경로를 분리할 경우)
+chmod -R 775 /ora_log (Diag 경로를 분리할 경우)
+
+ORACLE_BASE /u01/oracle
+ORACLE_HOME /u01/oracle/product/19c
+ORACLE_LOG /ora_log
+ORACLE ARCHIVE +RECO
+ORACLE DATAFILE Automatic Storage Management
+
+##### Grid Software 설치 경로 예시 #####
+chown -R oracle:dba /u01/oracle
+chmod -R 775 /u01/oracle
+
+Grid BASE /u01/grid/base
+Grid HOME /u01/grid/19c
+=> Grid Base와 Home 경로 분리
+
+3) Memory : At leas 8GB
+Between 8GB and 32GB = Equal to RAM
+More than 32GB = 32GB
+
+- Hugepage 사용 권고 (Doc 361468.1) – 문서 확인해보기
+ ● OS Page table entry접근에 따른 시스템 오버헤드 감소를 위해 설정 – OS performance 향상
+ ● Automatic Memory Management(AMM)과 HugePage 기능은 같이 사용 불가
+ ● Doc 401749.1에서 제공하는 Shell로 개수 산정
+ 
+ - Transparent HugePage disable
+ ● 성능문제 및 Instance Crash등을 예방하기 위해 Disable 필요 (Doc 1557478.1)
+ - 가상 메모리 튜닝 : LowMem 부하 및 노드 Crash를 예방
+ ● vm.min_free_kbytes = 524288 (Doc 1367153.1)
+ ● vm.swappiness=100 (Kernel Version 2.6.18 이하만 해당)
+ 
+4) Run level Requirements
+ ● Servers should be either in runlevel 3 or 5 -> 일반적으로 3
+  
+5) Network Requirements(IP Address Requirements)
+- 2 node 기준 총 7개의 IP필요 (노드별 Public, VIP, Private IP 각 1개 , SCAN IP 1개 ) – 랜카드가 필요한건 4개 VIP2개랑 
+    SCANIP는 가상 IP, 랜카드 필요없이 ip만 설정하면 자동으로 설정 가능
+- RFC952 규약에 따라Net, Host, Gateway, Domain Name에 “ _ ” (underscore) 문자 사용 금지
+- NIC 이름에는 “ . “ 사용 금지
+- MTU는 Switch를 포함한 모든 노드의 NIC에서 반드시 동일하게 구성
+- 127.*.*.* 는 다른 network interface에서 사용 금지
+- Subnet (169.254.*.*) 대역 사용 금지 (Oracle HAIP용)
+- Duplex 설정시 auto-negotiation 설정 금지 (Full 설정 권고)
+- Public & Private Network간에 SSH를 통해 접근이 가능해야 함 (Password x)
+ ● 설치시 Timeout 에러를 방지하기 위해 LoginGraceTime 0 설정 (/etc/ssh/sshd_config)
+- CRS 기동 실패 및 root.sh 실패를 예방하기 위해 리눅스 방화벽 (iptables) disable
+- Public Network Interface
+ ● TCP/IP Protocol을 지원 해야 함.
+ ● VIP는 반드시 Public Interface와 같은 Subnet에 할당
+ ● Default Gateway는 VIP와 같은 Subnet에 할당
+- Private Network Interface (Interconnect), Node간 Interconnect
+ ● UDP Protocol을 지원 해야 함.
+ ● Private Inteconnect를 위해, 10Gigabit Ethernet 권고 (최소 1Gb)
+ ● 반드시 Network switch 사용 (switch 이중화 권고) – Cross cable 연결 지원 안함
+ ● Public interface와 다른 Subnet에 할당
+ ● 비라우팅 주소 사용 권고 - Class A:10.0.0.0 에서 10.255.255.255, Class B: 172.16.0.0 에서 172.31.255.255. 
+ ● 캐쉬 퓨전 성능 향상을 위해 Private Interconnect에는 Jumbo Frame 사용 권고 (MTU 9000)
+- Interface Names : 모든 노드의 public interface name과 private interface name은 노드간에 동일하게 설정.
+  (ex>Public interface name : eth0, Private interface name : eth1)
+- NIC Bonding 
+ ● 장애 예방을 위해 Network interface를 다중화 하여 network interface (private and public) Failover 하도록 권장.
+ ● 리눅스 본딩 드라이버 사용시 mode 3 (for the interconnect) and mode 6 (for the interconnect and public networks) 구성 금지
+- H/W 장애시 직관적인 조치를 위해, NIC는 양 서버에서 같은 위치
+- SCAN(SINGLE CLIENT ACCESS NAME) 
+ ● SCAN은 반드시 Public Interface와 같은 Subnet에 할당
+ ● Public IP 3개(DNS등록)가 필요하며, 적어도 1개의 public IP는(/etc/hosts 등록) 등록 필요
+
+# Software Requirements
+
+1) OS Version
+
+[Oracle Linux 7 / RHEL 7]
+
+Oracle Linux 7.4 with the Unbreakable Enterprise Kernel 4: 
+4.1.12-124.19.2.el7uek.x86_64 or later
+Oracle Linux 7.4 with the Unbreakable Enterprise Kernel 5: 
+4.14.35-1818.1.6.el7uek.x86_64 or later
+Oracle Linux 7.7 with the Unbreakable Enterprise Kernel 6: 
+5.4.17-2011.4.4.el7uek.x86_64 or later
+Oracle Linux 7.5 with the Red Hat Compatible kernel: 
+3.10.0-862.11.6.el7.x86_64 or later
+Red Hat Enterprise Linux 7.5: 3.10.0-862.11.6.el7.x86_64 or later
+
+[Oracle Linux 8 / RHEL 8]
+
+Oracle Linux 8.1 with the Unbreakable Enterprise Kernel 6: 5.4.17-2011.0.7.el8uek.x86_64 or later
+Oracle Linux 8 with the Red Hat Compatible kernel: 4.18.0-80.el8.x86_64 or later
+Red Hat Enterprise Linux 8: 4.18.0-80.el8.x86_64 or later
+
+[SLES 12]
+SUSE Linux Enterprise Server 12 SP3: 4.4.162-94.72-default or later
+SUSE Linux Enterprise Server 15: 4.12.14-23-default or later
+
+2) OS Patches / Packages
+
+[Common]
+Ensure that OpenSSH is installed on your servers. OpenSSH is the required SSH software.
+# For Oracle C++, Pro*C/C++, Oracle C++ Call Interface, Oracle XML Developer's Kit (XDK) 
+- Intel C/C++ Compiler 12.0.5 or later, and the version of GNU C and C++ compilers listed 
+  in the software requirements section in this document for your platform.
+- Oracle C++ Call Interface (OCCI) applications can be built only with Intel C++ Compiler 12.0.5 used 
+  with the standard template libraries of the gcc versions listed in the software requirements section 
+  in this document for your platform.
+
+# For Pro*COBOL    
+Micro Focus Server Express 5.1
+Micro Focus Visual COBOL for Eclipse 2.2 - Update 2
+
+[Oracle Linux 7 / RHEL 7]
+# The following operating system filesets are required for Oracle Linux 7 with UEK3:
+bc
+binutils-2.23.52.0.1-12.el7.x86_64
+compat-libcap1-1.10-3.el7.x86_64
+compat-libstdc++-33-3.2.3-71.el7.i686
+compat-libstdc++-33-3.2.3-71.el7.x86_64
+fontconfig-devel-2.10.95-7.el7.x86_64
+ksh
+libX11-1.6.0-2.1.el7.i686
+libX11-1.6.0-2.1.el7.x86_64
+libXau-1.0.8-2.1.el7.i686
+libXau-1.0.8-2.1.el7.x86_64
+libXi-1.7.2-1.el7.i686
+libXi-1.7.2-1.el7.x86_64
+libXtst-1.2.2-1.el7.i686
+libXtst-1.2.2-1.el7.x86_64
+libXrender-devel-0.9.10-1.el7.i686
+libXrender-devel-0.9.10-1.el7.x86_64
+libXrender-0.9.10-1.el7.i686
+libXrender-0.9.10-1.el7.x86_64
+libgcc-4.8.2-3.el7.i686
+libgcc-4.8.2-3.el7.x86_64
+libstdc++-4.8.2-3.el7.i686
+libstdc++-4.8.2-3.el7.x86_64
+libstdc++-devel-4.8.2-3.el7.i686
+libstdc++-devel-4.8.2-3.el7.x86_64
+libxcb-1.9-5.el7.i686
+libxcb-1.9-5.el7.x86_64
+make-3.82-19.el7.x86_64 make-3.82-19.el7.x86_64
+net-tools-2.0-0.17.20131004git.el7 (x86_64) (for Oracle RAC and Oracle Clusterware)
+nfs-utils-1.3.0-0.21.el7.x86_64
+python-2.7.5-34.0.1.el7 (x86_64) (for Oracle ACFS Remote)
+python-configshell-1.1.fb18-1.el7.noarch (for Oracle ACFS Remote)
+python-rtslib-2.1.fb57-3.el7.noarch (for Oracle ACFS Remote)
+python-six-1.9.0-2.el7.noarch (for Oracle ACFS Remote)
+smartmontools-6.2-4.el7.x86_64
+sysstat-10.1.5-1.el7.x86_64
+targetcli-2.1.fb41-3.el7.noarch (for Oracle ACFS Remote)
+
+# The following operating system filesets are required for Oracle Linux 7.2 with UEK4:
+bc    
+binutils-2.23.52.0.1-55.el7.x86_64
+compat-libcap1-1.10-3.el7.x86_64
+compat-libstdc++-33-3.2.3-71.el7.i686
+compat-libstdc++-33-3.2.3-71.el7.x86_64
+elfutils-libelf-0.163-3.el7.i686
+elfutils-libelf-0.163-3.el7.x86_64
+elfutils-libelf-devel-0.163-3.el7.i686
+elfutils-libelf-devel-0.163-3.el7.x86_64
+fontconfig-devel-2.10.95-7.el7.x86_64
+glibc-2.17-106.0.1.el7_2.6.i686
+glibc-2.17-106.0.1.el7_2.6.x86_64
+glibc-devel-2.17-106.0.1.el7_2.6.i686
+glibc-devel-2.17-106.0.1.el7_2.6.x86_64
+ksh
+libaio-0.3.109-13.el7.i686
+libaio-0.3.109-13.el7.x86_64
+libaio-devel-0.3.109-13.el7.i686
+libaio-devel-0.3.109-13.el7.x86_64
+libX11-1.6.3-2.el7.i686
+libX11-1.6.3-2.el7.x86_64
+libXau-1.0.8-2.1.el7.i686
+libXau-1.0.8-2.1.el7.x86_64
+libXi-1.7.4-2.el7.i686
+libXi-1.7.4-2.el7.x86_64
+libXtst-1.2.2-2.1.el7.i686
+libXtst-1.2.2-2.1.el7.x86_64
+libXrender-devel-0.9.10-1.el7.i686
+libXrender-devel-0.9.10-1.el7.x86_64
+libXrender-0.9.10-1.el7.i686
+libXrender-0.9.10-1.el7.x86_64
+libgcc-4.8.5-4.el7.i686
+libgcc-4.8.5-4.el7.x86_64
+librdmacm-devel-1.0.21-1.el7.i686
+librdmacm-devel-1.0.21-1.el7.x86_64
+libstdc++-4.8.5-4.el7.i686
+libstdc++-4.8.5-4.el7.x86_64
+libstdc++-devel-4.8.5-4.el7.i686
+libstdc++-devel-4.8.5-4.el7.x86_64
+libxcb-1.11-4.el7.i686
+libxcb-1.11-4.el7.x86_64
+make-3.82-21.el7.x86_64
+nfs-utils-1.3.0-0.21.el7.x86_64 (for Oracle ACFS)
+net-tools-2.0-0.17.20131004git.el7 (x86_64) (for Oracle RAC and Oracle Clusterware)
+python-2.7.5-34.0.1.el7 (x86_64) (for Oracle ACFS Remote)
+python-configshell-1.1.fb18-1.el7.noarch (for Oracle ACFS Remote)
+python-rtslib-2.1.fb57-3.el7.noarch (for Oracle ACFS Remote)
+python-six-1.9.0-2.el7.noarch (for Oracle ACFS Remote)
+smartmontools-6.2-4.el7.x86_64
+sysstat-10.1.5-7.el7.x86_64
+targetcli-2.1.fb41-3.el7.noarch (for Oracle ACFS Remote)
+
+# The following operating system filesets are required for Oracle Linux 7 with RHEL Compatible Kernel:
+
+bc
+binutils-2.23.52.0.1-12.el7.x86_64
+compat-libcap1-1.10-3.el7.x86_64
+compat-libstdc++-33-3.2.3-71.el7.i686
+compat-libstdc++-33-3.2.3-71.el7.x86_64
+glibc-2.17-36.el7.i686
+glibc-2.17-36.el7.x86_64
+glibc-devel-2.17-36.el7.i686
+glibc-devel-2.17-36.el7.x86_64
+ksh
+libaio-0.3.109-9.el7.i686
+libaio-0.3.109-9.el7.x86_64
+libaio-devel-0.3.109-9.el7.i686
+libaio-devel-0.3.109-9.el7.x86_64
+libX11-1.6.0-2.1.el7.i686
+libX11-1.6.0-2.1.el7.x86_64
+libXau-1.0.8-2.1.el7.i686
+libXau-1.0.8-2.1.el7.x86_64
+libXi-1.7.2-1.el7.i686
+libXi-1.7.2-1.el7.x86_64
+libXtst-1.2.2-1.el7.i686
+libXtst-1.2.2-1.el7.x86_64
+libXrender-devel-0.9.10-1.el7.i686
+libXrender-devel-0.9.10-1.el7.x86_64
+libXrender-0.9.10-1.el7.i686
+libXrender-0.9.10-1.el7.x86_64
+libgcc-4.8.2-3.el7.i686
+libgcc-4.8.2-3.el7.x86_64
+libstdc++-4.8.2-3.el7.i686
+libstdc++-4.8.2-3.el7.x86_64
+libstdc++-devel-4.8.2-3.el7.i686
+libstdc++-devel-4.8.2-3.el7.x86_64
+libxcb-1.9-5.el7.i686
+libxcb-1.9-5.el7.x86_64
+make-3.82-19.el7.x86_64 make-3.82-19.el7.x86_64
+nfs-utils-1.3.0-0.21.el7.x86_64 (for Oracle ACFS)
+net-tools-2.0-0.17.20131004git.el7 (x86_64) (for Oracle RAC and Oracle Clusterware)
+python-2.7.5-34.0.1.el7 (x86_64) (for Oracle ACFS Remote)
+python-configshell-1.1.fb18-1.el7.noarch (for Oracle ACFS Remote)
+python-rtslib-2.1.fb57-3.el7.noarch (for Oracle ACFS Remote)
+python-six-1.9.0-2.el7.noarch (for Oracle ACFS Remote)
+smartmontools-6.2-4.el7.x86_64
+sysstat-10.1.5-1.el7.x86_64
+targetcli-2.1.fb41-3.el7.noarch (for Oracle ACFS Remote)
+
+# The following operating system filesets are required for RHEL 7.3:
+bc
+binutils-2.23.52.0.1-12.el7.x86_64
+compat-libcap1-1.10-3.el7.x86_64
+compat-libstdc++-33-3.2.3-71.el7.i686
+compat-libstdc++-33-3.2.3-71.el7.x86_64
+glibc-2.17-36.el7.i686
+glibc-2.17-36.el7.x86_64
+glibc-devel-2.17-36.el7.i686
+glibc-devel-2.17-36.el7.x86_64
+ksh
+libaio-0.3.109-9.el7.i686
+libaio-0.3.109-9.el7.x86_64
+libaio-devel-0.3.109-9.el7.i686
+libaio-devel-0.3.109-9.el7.x86_64
+libX11-1.6.0-2.1.el7.i686
+libX11-1.6.0-2.1.el7.x86_64
+libXau-1.0.8-2.1.el7.i686
+libXau-1.0.8-2.1.el7.x86_64
+libXi-1.7.2-1.el7.i686
+libXi-1.7.2-1.el7.x86_64
+libXtst-1.2.2-1.el7.i686
+libXtst-1.2.2-1.el7.x86_64
+libXrender-devel-0.9.10-1.el7.i686
+libXrender-devel-0.9.10-1.el7.x86_64
+libXrender-0.9.10-1.el7.i686
+libXrender-0.9.10-1.el7.x86_64
+libgcc-4.8.2-3.el7.i686
+libgcc-4.8.2-3.el7.x86_64
+libstdc++-4.8.2-3.el7.i686
+libstdc++-4.8.2-3.el7.x86_64
+libstdc++-devel-4.8.2-3.el7.i686
+libstdc++-devel-4.8.2-3.el7.x86_64
+libxcb-1.9-5.el7.i686
+libxcb-1.9-5.el7.x86_64
+make-3.82-19.el7.x86_64 make-3.82-19.el7.x86_64
+nfs-utils-1.3.0-0.21.el7.x86_64 (for Oracle ACFS)
+net-tools-2.0-0.17.20131004git.el7 (x86_64) (for Oracle RAC and Oracle Clusterware)
+python-2.7.5-34.0.1.el7 (x86_64) (for Oracle ACFS Remote)
+python-configshell-1.1.fb18-1.el7.noarch (for Oracle ACFS Remote)
+python-rtslib-2.1.fb57-3.el7.noarch (for Oracle ACFS Remote)
+python-six-1.9.0-2.el7.noarch (for Oracle ACFS Remote)
+smartmontools-6.2-4.el7.x86_64
+sysstat-10.1.5-1.el7.x86_64
+targetcli-2.1.fb41-3.el7.noarch (for Oracle ACFS Remote)
+
+[Oracle Linux 8 / RHEL 8]
+
+bc-1.07.1-5.el8 (x86_64)
+binutils-2.30-58.el8 (x86_64)
+elfutils-libelf-0.176-5.el8 (x86_64)
+elfutils-libelf-devel-0.176-5.el8 (x86_64)
+fontconfig-devel-2.13.1-3.el8 (x86_64)
+glibc-2.28-72.el8 (x86_64)
+glibc-devel-2.28-72.el8 (x86_64)
+ksh-20120801-252.el8 (x86_64)
+libaio-0.3.112-1.el8 (x86_64)
+libaio-devel-0.3.112-1.el8 (x86_64)
+libXrender-0.9.10-7.el8 (x86_64)
+libX11-1.6.7-1.el8 (x86_64)
+libXau-1.0.8-13.el8 (x86_64)
+libXi-1.7.9-7.el8 (x86_64)
+libXtst-1.2.3-7.el8 (x86_64)
+libgcc-8.3.1-4.5.el8 (x86_64)
+libnsl-2.28-72.el8 (x86_64)
+librdmacm-22.3-1.el8 (x86_64)
+libstdc++-8.3.1-4.5.el8 (x86_64)
+libstdc++-devel-8.3.1-4.5.el8 (x86_64)
+libxcb-1.13-5.el8 (x86_64)
+libibverbs-22.3-1.el8 (x86_64)
+make-4.2.1-9.el8 (x86_64)
+smartmontools-6.6-3.el8 (x86_64)
+sysstat-11.7.3-2.el8 (x86_64)
+
+# Optional Packages for Red Hat Enterprise Linux 8
+ipmiutil (for Intelligent Platform Management Interface)
+libnsl2 (for Oracle Database Client only)
+libnsl2-devel (for Oracle Database Client only)
+libvirt-devel (for Oracle Clusterware)
+libvirt-libs (for Oracle Clusterware)
+net-tools (for Oracle RAC and Oracle Clusterware)
+nfs-utils (for Oracle ACFS)
+targetcli-2.1.fb49-1.el8 (noarch)
+
+[SLES 12]
+The following packages (or later versions) must be installed:
+bc
+binutils-2.24-2.165.x86_64
+gcc-c++-32bit-4.8-6.189.x86_64
+gcc-c++-4.8-6.189.x86_64
+gcc48-c++-4.8.3+r212056-6.3.x86_64
+gcc-32bit-4.8-6.189.x86_64
+gcc-4.8-6.189.x86_64
+gcc-info-4.8-6.189.x86_64
+gcc-locale-4.8-6.189.x86_64
+gcc48-32bit-4.8.3+r212056-6.3.x86_64
+gcc48-4.8.3+r212056-6.3.x86_64
+gcc48-info-4.8.3+r212056-6.3.noarch
+gcc48-locale-4.8.3+r212056-6.3.x86_64
+glibc-2.19-17.72.x86_64
+glibc-devel-2.19-17.72.x86_64
+libaio-devel-0.3.109-17.15.x86_64
+libaio1-0.3.109-17.15.x86_64
+libaio1-32bit-0.3.109-17.15.x86_64
+libgfortran3-4.8.3+r212056-6.3.x86_64
+libX11-6-1.6.2-4.12.x86_64
+libX11-6-32bit-1.6.2-4.12.x86_64
+libXau6-1.0.8-4.58.x86_64
+libXau6-32bit-1.0.8-4.58.x86_64
+libXtst6-1.2.2-3.60.x86_64
+libXtst6-32bit-1.2.1-2.4.1.x86_64
+libcap-ng-utils-0.7.3-4.125.x86_64
+libcap-ng0-0.7.3-4.125.x86_64
+libcap-ng0-32bit-0.7.3-4.125.x86_64
+libcap-progs-2.22-11.709.x86_64
+libcap1-1.10-59.61.x86_64
+libcap1-32bit-1.10-59.61.x86_64
+libcap2-2.22-11.709.x86_64
+libcap2-32bit-2.22-11.709.x86_64
+libgcc_s1-32bit-4.8.3+r212056-6.3.x86_64
+libgcc_s1-4.8.3+r212056-6.3.x86_64
+libpcap1-1.5.3-2.18.x86_64
+libstdc++6-32bit-4.8.3+r212056-6.3.x86_64
+libstdc++6-4.8.3+r212056-6.3.x86_64
+libelf-devel-0.158-6.1.x86_64 
+libjpeg-turbo-1.3.1-30.3.x86_64
+libjpeg62-32bit-62.1.0-30.1.x86_64
+libjpeg62-62.1.0-30.1.x86_64
+libjpeg62-turbo-1.3.1-30.1.x86_64
+libpcre1-32bit-8.33-3.314.x86_64
+libpcre1-8.33-3.314.x86_64
+libpcre16-0-8.33-3.314.x86_64
+libpng12-0-1.2.50-8.21.x86_64
+libpng12-0-32bit-1.2.50-8.21.x86_64
+libstdc++33-3.3.3-62.1.x86_64
+libtiff5-4.0.4-12.2.x86_64
+make-4.0-2.107.x86_64
+mksh-50-2.13.x86_64
+net-tools-1.60-764.185.x86_64 (for Oracle RAC and Oracle Clusterware)
+nfs-kernel-server-1.3.0-6.9.x86_64 (for Oracle ACFS)
+pixz-1.0.2-6.23.x86_64
+smartmontools-6.2-4.33.x86_64
+sysstat-8.1.5-7.32.1.x86_64
+xorg-x11-libs-7.6-45.14
+xz-5.0.5-4.852.x86_64
+
+3) Kernel Setting
+
+[Common]
+fs.aio-max-nr = 1048576
+fs.file-max = 6815744
+kernel.shmall = 2097152 (40 percent of the size of physical memory in pages)
+kernel.shmmax = 4294967295 (Half the size of physical memory in bytes)
+kernel.shmmni = 4096
+kernel.sem = 250 32000 100 128
+panic_on_oops  = 1
+
+net.ipv4.ip_local_port_range = 9000 65500
+net.core.rmem_default = 262144
+net.core.rmem_max = 4194304
+net.core.wmem_default = 262144
+net.core.wmem_max = 1048576
+
+/etc/security/limits.conf (grid user에도 동일 설정)
+oracle   soft    nproc    16384 (as per unpublished Bug 15971421)
+oracle   hard   nproc   16384
+oracle   soft    nofile    1024
+oracle   hard   nofile    65536
+oracle   soft    stack    10240
+oracle   hard   stack    10240
+
+4) OS 설정 고려 사항
+- Avahi Daemon Disable
+ ● CSSD Startup 실패 문제를 예방하기 위해 avahi. 데몬 비활성화 (Doc 1501093.1)
+- nproc 파라미터 설정
+ ● 리눅스 6.x의 경우 limits.conf에 nproc 설정시 파라미터가 무시됨 (Doc 1487773.1)
+ ● /etc/security/limits.d/90-nproc.conf 를 수정할 것
+- NTP Slewing 옵션 설정
+ ● 급격한 시간 변동으로 인한 시스템 리붓을 방지하기 위해 NTP에 –x (slewing) 옵션 설정
+- ASLR Disable (Doc 1345364.1)
+ ● 공유 메모리 주소의 가용성을 보장 할 수 없는 문제를 해소하기 위해 Disable 필요
+ ● kernel.randomize_va_space=0
+ ● kernel.exec-shield=0
+- 리눅스의 NIS조회 캐쉬를 위해 NSCD를 사용 
+ ● NSCD는 run level 3,5에 on 
+ ● NFS or NAS Mount 사용시 설정
+- Kernel version 2.6.31 이상에선 Reverse Path Filtering문제가 해결
+ ● rp_filter=0 (Doc 1286796.1) 
+- bnx2 network driver
+ ● bnx2 driver를 사용하는 경우, 안정성 문제를 방지하기 위해, kernel version을 2.6.18.-194.8.1 (EL 5.5) 이상으로 설치
+- 리눅스 7.x의 경우 추가기능인 tmpfiles clear에 의한 tns 통신 단절 장애 대비 temp 위치 Oracle
+  파일을 삭제하지 못하도록 설정 필요 (Doc. 2455193.1)
+ ● vi /usr/lib/tmpfiles.d/tmp.conf
+    x /tmp/.oracle*
+    x /var/tmp/.oracle*
+    x /usr/tmp/.oracle*
+    
+- ulimit 설정
+[ /etc/profile ]
+if [ $USER = "oracle" ]; then
+if [ $SHELL = "/bin/ksh" ]; then
+ulimit -u 16384
+ulimit -n 65536
+else
+ulimit -u 16384 -n 65536
+fi
+fi
+
+- RHEL 8 Version 에서는 최소 19.7 RU 패치를 
+
+
+
+
+
+
+
+
+  
+
+
+
+
 
 
 
