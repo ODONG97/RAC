@@ -1,0 +1,5 @@
+# 19c RAC Installation Requirements
+# Hardware Requirements
+
+1) Storage
+- 12c 부터는 RAWDEVICE를 지원하지 않으며, ASM과 
