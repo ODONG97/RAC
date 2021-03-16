@@ -2,4 +2,66 @@
 # Hardware Requirements
 
 1) Storage
-- 12c 부터는 RAWDEVICE를 지원하지 않으며, ASM과 
+- 12c 부터는 RAWDEVICE를 지원하지 않으며, ASM과 CFS(Cluster Fild System)만 가능. / Oracle은 ASM 권고
+ㄴ FileSystem : 운영체제가 파티션이나 디스크에 파일들이 연속되게 하기 위해 사용하는 방법, 파일들이 디스크상에서 구성되는 방식
+ㄴ RAWDEVICE : 블록 장치로 구성되는 것이 아닌 문자 장치로 구성되는 방식으로 포맷을 지정하지 않고 디스크 구성
+    ㄴ 문자장치 : 문자 단위로 입출력이 이루어지며, 커널이 제공하는 버퍼를 사용하지 않고, 입출력 장치 버퍼 또는 큐 사용
+ㄴ ASM(Automatic Storage Management) : 오라클에서 스토리지를 직접 관리하는 기술, 데이터를 저장하거나 불러오는 원리(파일시스템)과 비슷하지만
+OS가 아닌 ASM에 요청함
+
+- 2개 이상의 HBA 또는 initiator를 Multhipath(디스크간 I/O 채널 여러 개 구성) S/W(EMCPowerPath, Veritas DMP, Sun Traffic Manager,
+Hitachi HDLM, IBM SDDPC, Device Mapper 등) 이용하여 디스크 접근 경로 다중화 권고
+ ㄴHBA(Host Bus Adapter)
+
+- 하이엔드 스토리지를 사용시, 하드웨어 RAID 구성 권고 (ASM External Redundancy)
+- 하드웨어 RAID의 스트라이프 크기는 2의 승수 중 오라클 ASM 할당 단위 보다 작거나 같은 값으로 선택 (ASM AU=4MB)
+- 하드웨어 RAID 미구성시 ASM Redundancy 설정 (Normal or High)
+- ASM Diskgroup당 같은 크기와 성능을 갖는 4개 이상의 LUN을 할당 (LUN의 크기는 개당 2TB 미만으로 설정)
+- ASM Diskgroup은 OCR/VOTE, DATA, FRA(Fast Recovery Area) (RMEM 백업), MGMT 외에 추가 생성하지 않을 것을 권고
+- ASM Disk는 반드시 Partition된 Disk를 사용 (Doc ID 580153.1)
+- Multipath구성시에도 동일하게 반드시 Partition된 Disk 사용( 구성 방법은 Doc ID 1594584.1 참고)
+- 12.2 부터는 GIMR DB(MGMT)=RAC 성능 진단 정보, 설정하면 DB Instance가 하나가 더 생김 Diskgroup을 OCR/VOTE Diskgroup과 분리하거나 통합하는 것을 GRID Setup 중 선택할 수 있으며, 장애 포인트 감소를 위해 분리할 것을 권고하며, External Redundancy 기준 38GB 이상의 디스크 공간이 필요
+- ASM Diskgroup은 OCR/VOTE용, DATA용, FRA용도(Fast Recovery Area), MGMT(Optional)만 생성할 것을 권고 (MGMT는 OCR/VOTE와 공유 가능)
+- Normal Redundancy 기준 OCR/VOTE DG용으로 2.5GB 이상 필요 
+ㄴMGMT (GIMR) DG는 External 구성시 최소 38GB 이상의 공간을 필요로 함#
+
+# Supported Storage Options for Oracle Grid Infrastructure
+(Storage Option : OCR and Voting Disks, Oracle Clusterware binaries(grid)= engine), Oracle RAC binaries, Oracle Database Files, Oracle
+Recovery Files)
+Oracle Automatic Storage Management(Oracle ASM) : Yes, No, No, Yes, Yes
+Oracle Automatic Storage Management Cluster File System(Oracle ACFS) : No, No, Yes, Yes(Oracle Database 12cRelease 12.1.0.2 and later),
+Yes(Oracle Database 12cRelease 12.1.0.2 and later)
+Direct NFS Client access to a certified network attached storage (NAS) filer : No, No, No, Yes, Yes
+Direct-attached storage (DAS) : No, No, Yes, Yes, Yes
+Shared Disk Partitions(Raw devices) : No, No, No, No, No
+Local file system(NTFS formatted disk) : No, Yes, Yes, No, No
+
+# Storage Option 선택 시 지침 가이드
+1) Raw 또는 Block Devices 장치는 지원되지 않습니다. Oracle ASM에서만 사용 가능
+
+# Oracle ASM Disk Space Minimum Requirements for Oracle Database
+Redundancy Level / Minimum number of disks / Data Files / Recovery Files / Both File Types
+* External / 1 / 2.7GB / 7.8GB / 10.5GB
+* Normal / 2 / 5.2GB / 15.6GB / 20.8GB
+* High / 3 / 7.8GB / 23.4GB / 31.2GB
+* Flex / 3 / 7.8GB / 23.4GB / 31.2GB
+
+* ASM Disk Group Redundancy : OCR, VOTE 영역은 Normal Redundancy로 구성 권고
+
+2) DiskSpace
+- 장애 영향 최소화 및 롤링 패치 및 업그레이드를 위해 S/W는 비 공유 홈에 설치 권고
+- Oracle Grid Infrastructure Home : 최소 15.5GB (100GB 이상 권고)
+- Oracle Grid Infrastructure Base  : 최소 12GB + TFA 10GB = 22GB 이상 권고
+- Oracle Database Home & Base  : 최소 7.5GB + 12GB = 20GB (40GB 이상 권고)
+- /tmp : 최소 4GB이상 권고 = 설치할 때 tmp 사용함, 설치하다가 tmp로 임시 저장, 부족하면 설치 안 됨, RAC는 필수 5GB~10GB
+
+
+
+
+
+
+
+
+
+
+
