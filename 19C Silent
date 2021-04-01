@@ -59,4 +59,162 @@ Pam_limits.so : 이 모듈을 사용하여 자워 사용 제한 설정 가능
 - 사용자가 로그인 했을 때 적용되는 스크립트를 정의, /etc/profile or .bash_profile 스크립트 내용 실행 
 - /etc/profile -> 모든 사용자에게 공통 적용
 - .bash_profile -> 해당 사용자에게만 적용 : /home/userid/.bash_profile
-- 사용자가 로그인하면 /etc/profile -> /
+- 사용자가 로그인하면 /etc/profile -> /home/userid/.bash_profile 순서로 실행
+
+if [ $USER = "oracle" ] || [ $USER = "grid" ]; then
+if [ $SHELL = "/bin/ksh" ]; then
+ ulimit -p 16384
+ ulimit -n 65536
+else
+ ulimit -u 16384 -n 65536
+fi
+ umask 022
+fi
+
+========
+Ulimit Option
+-a : 모든 제한 사항 보여줌
+-c : Maximum Core File Size
+-d : Process data segment 최대 크기
+-f : shell에 의해 만들어질 수 있는 파일의 최대 크기
+-s : 최대 stack 크기
+-p : 파이프 크기
+-n : open 할 수 있는 파일의 최대 수
+-u : 단일 유저가 사용 가능한 process의 최대 개수
+-v : 최대 가상 메모리의 양
+-S : soft 한도 초과하면 경고 메시지
+-H : hard 한도 넘을 수 없음
+=========
+Ulimit은 process의 자원 한도를 설정하는 명령어, soft 한도 / hard 한도 두 가지로 구분 됨
+- soft : 새로운 프로그램을 생성하면 기본적으로 적용되는 한도
+- hard : soft 한도에서 최대로 늘릴 수 있는 한도
+
+5) /etc/security/limits.conf - grid user에도 동일 설정
+oracle   soft    nproc    16384 (as per unpublished Bug 15971421)
+oracle   hard   nproc   16384
+oracle   soft    nofile    1024
+oracle   hard   nofile    65536
+oracle   soft    stack    10240
+oracle   hard   stack    10240
+
+6) Avahi Daemon Disable : 로컬에서 IP를 할당 받지 못하면 데몬이 로컬에 알려진 네트워크를 찾아서 자동으로 Hostname과 Domain Name을 할당 받는다.
+- DHCP 환경이 없는 네트워크인 wireless 환경에서 수동 설정 없이 자동으로 네트워킹을 할 수 있는 환경 제작
+- zeroconf service (리눅스-Avahi , 애플-Bonjour, MS-UPNP) => avahi daemon 활성 시 CSSD Startup이 실패 할 경우가 있기 때문에 Stop&Disable 설정
+# Avahi Daemon 비 활성화
+systemctl stop avahi-daemon.service
+systemctl disable avahi-daemon.service
+systemctl status avahi-daemon.service
+
+7) Firewall Daemon Disable : 방화벽 해제 -> 원활한 grid 및 node 간 통신을 위해
+systemctl stop firewalld.service
+systemctl disable firewalld.service
+systemctl status firewalld.service
+
+8) SELinux Disable -> Security Enhanced Linux -> Service나 File 접근에 대한 보안을 위한 리눅스 모듈
+vi /etc/selinux/config
+SELINUX=disabled => SELinux 비 활성화
+reboot => rebooting 후 적용
+
+9) Group 생성 / User 생성 / 권한 부여
+[Create OS Groups]
+groupadd oinstall
+groupadd dba
+groupadd asmadmin
+groupadd asmdba
+groupadd asmoper
+
+[Grid / Oracle Software를 소유하는 User 생성]
+useradd -g oinstall -G asmadmin,asmdba,asmoper grid
+useradd -g oinstall -G dba,asmdba oracle
+
+[Grid / Oracle User Password 설정]
+passwd grid
+passwd oracle
+
+[Grid / Oracle 설치하기 위한 디렉토리 생성]
+mkdir -p /grid/base
+mkdir -p /grid/oraInventory
+mkdir -p /grid/product/19c
+mkdir -p /oracle/product/19c
+
+[디렉토리 owner 설정 / 권한 부여]
+chown -R grid:oinstall /grid
+chown -R oracle:oinstall /oracle
+chmod -R 775 /grid
+chmod -R 775 /oracle
+=========================================
+ASM Configure(on MasterNode)
+1) Storage Type
+1. File System : 파일과 그 안에 든 데이터를 저장하고 찾기 쉽도록 유지 및 관리하는 방법
+ㄴ 장점 : 디렉토리 구조로 관리하여 사용자의 편의성이 좋음
+ㄴ 단점 : OS의 의존도가 너무 높아서 OS 성능에 따라 oracle 성능이 결정 됨 Oracle -> OS File System -> (Shared) Disk
+
+2) Raw Device : OS를 거치지 않고 Oracle이 직접 Disk에 접근하여 I/O 
+ㄴ 장점 : Direct로 Disk에 접근하여 속도나 성능 면에서 F/S 보다 좋음
+ㄴ 단점 : 파일 1개에 Disk 1개로 Mapping 되어 관리 어려움 Oracle -> (Shared) Disk
+
+3) ASM : Oracle 10gR1 New Feature로 자동 저장 영역 관리 수행, File System의 데이터를 저장하거나 불러오는 원리와 Raw Device 처럼 OS에 거치지 않는 차이가 있음(ASM 요청)
+ㄴ 장점 : 자동 Rebalancing 수행하여 disk 추가/삭제 용이하여 효과적인 Disk 관리 / 서로 다른 Disk에 균등하고 자동으로 분산 가능 / F.S에 비해 속도 빠름
+ㄴ 단점 : 백업 시 RMAN 사용
+
+[ASM Instance]
+ASM Instance는 Oracle이 데이터파일을 I/O하기 위해서 ASM Instance(OS)를 경유하지 않고 ASM Disk에 직접 Write
+ASM Instance는 Disk의 extent같은 meta 정보를 제공해주는 역할 수행
+
+[ASMLib]
+ASMLib는 ASM을 지원하는 Library이며 ASM Driver를 관리하는 Tool
+ASM Driver는 시스템을 다시 시작 할 때마다 ASM과 같이 사용하는 Disk를 Rebind 할 필요가 없어 Disk 장치 구성 및 관리 단순화. (rebind->ASM과 block device 묶어주는 개념)
+- oracleasmlib : ASM을 사용하기 위한 Oracle 사용자 library
+- oracleasm-support : ASM Library 관리 Utility
+- kmod-oracleasm : ASM Library를 위한 Kernel 모듈
+
+=====
+configure : ASM Driver 설정 
+init / exit : ASM Driver 로드(Start) / Stop
+scandisks : Load 된 ASM Disk들을 scan
+status : ASM Driver 상태 조회
+listdisks : scan 된 ASM Disk 들의 목록을 보여줌
+listiids / deleteiids : iid 파일들의 목록을 보여줌 / 삭제
+querydisk : ASM Disk가 가리키는 기본 물리적 장치를 식별
+createdisk / deletedisk : ASM을 사용하기 위한 device 할당 / 제거
+renamedisk : ASM Disk 라벨 이름 변경
+update-driver : 최신 ASM Driver를 download
+=====
+[ASMLib - Partitioning]
+PV - VG - LV
+/dev/sdb1 - DATA - DATA01, DATA02 // /dev/sdb2 - OCR - OCR01,OCR02,OCR03 // /dev/sdb3 - RECO - RECO01  // /dev/sdb4-GIMR-GIMR01
+======
+<양 쪽 node에서 수행>
+oracleasm rpm install
+# rpm -ivh kmod-oracleas.x86_64 0:2.0.8-21.el7
+# rpm -ivh oracleasmlib-2.0.12-1.el7.x86_64.rpm
+# rpm -ivh oracleasm-support-2.1.11-2.el7.x86_64.rpm
+
+<1번 node에서 수행>
+파티션 분할
+# fdisk /dev/sdb1~4
+
+PV(Physical volume) 생성
+pvcreate /dev/sdb1
+pvcreate /dev/sdb2
+pvcreate /dev/sdb3
+pvcreate /dev/sdb4
+
+VG(Volume Group) 생성
+vgcreate DATA /dev/sdb1
+vgcreate OCR /dev/sdb2
+vgcreate RECO /dev/sdb3
+vgcreate GIMR /dev/sdb4
+
+
+
+
+
+
+
+
+
+
+
+
+
